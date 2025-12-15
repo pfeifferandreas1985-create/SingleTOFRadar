@@ -81,5 +81,13 @@ Cycle through modes by tapping the Touch Sensor (D0):
 - **Red:** Hardware Error / Sensor Freeze.
 - **White (Flash):** Mode Change Confirmation.
 
----
-*Developed by NERO ROBOTICS*
+## Contact & Copyright
+
+**Andreas Pfeiffer**  
+Seestraße 20  
+78234 Engen  
+Deutschland  
+
+📧 pfeiffer.andreas1985@gmail.com
+
+**© 2025 Andreas Pfeiffer. All Rights Reserved.**

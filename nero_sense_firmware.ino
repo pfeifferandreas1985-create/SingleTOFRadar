@@ -4,6 +4,12 @@
  * Role: High-Performance Lidar Radar Unit
  * Features: Robust Sensor Logic + Multi-Mode UI + Status Ring
  * Hardware: Wemos D1 Mini (ESP8266)
+ *
+ * Copyright (c) 2025 Andreas Pfeiffer
+ * Seestraße 20, 78234 Engen, Deutschland
+ * pfeiffer.andreas1985@gmail.com
+ * All Rights Reserved.
+ *
  * Display: GC9A01 (240x240 Round) via Hardware SPI
  * Sensor: VL53L1X (TOF) via I2C
  * Servo: SG90 (PWM)
