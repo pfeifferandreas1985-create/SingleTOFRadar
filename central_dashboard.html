@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>TRON CENTRAL COMMAND</title>
+    <style>
+        body {
+            background: #000;
+            color: #0ff;
+            font-family: monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            padding: 20px;
+            border-bottom: 1px solid #0ff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            margin: 0;
+            letter-spacing: 5px;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        #main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .radar-panel {
+            flex: 1;
+            position: relative;
+            border-right: 1px solid #033;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .radar-panel:last-child {
+            border-right: none;
+        }
+
+        .panel-header {
+            padding: 10px;
+            background: rgba(0, 50, 50, 0.5);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        canvas {
+            flex: 1;
+            background: radial-gradient(circle, #001111 0%, #000000 90%);
+            width: 100%;
+            height: 100%;
+        }
+
+        input {
+            background: transparent;
+            border: 1px solid #0ff;
+            color: #0ff;
+            padding: 5px;
+            font-family: inherit;
+        }
+
+        button {
+            background: #033;
+            color: #0ff;
+            border: 1px solid #0ff;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0ff;
+            color: #000;
+        }
+
+        .status {
+            font-weight: bold;
+            color: red;
+        }
+
+        .status.connected {
+            color: #0f0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>TRON COMMAND</h1>
+        <div>SYSTEM STATUS: <span id="global-status">ACTIVE</span></div>
+    </header>
+
+    <div id="main">
+        <!-- SYSTEM A: ULTRASONIC -->
+        <div class="radar-panel" id="panel-A">
+            <div class="panel-header">
+                <span>SYSTEM A: ULTRASONIC</span>
+                <div>
+                    <input type="text" id="ip-A" value="192.168.178.70">
+                    <button onclick="connectA()">CONNECT</button>
+                    <span id="status-A" class="status">OFFLINE</span>
+                </div>
+            </div>
+            <canvas id="canvas-A"></canvas>
+        </div>
+
+        <!-- SYSTEM B: TOF -->
+        <div class="radar-panel" id="panel-B">
+            <div class="panel-header">
+                <span>SYSTEM B: TOF LIDAR</span>
+                <div>
+                    <input type="text" id="ip-B" value="192.168.178.71">
+                    <button onclick="connectB()">CONNECT</button>
+                    <span id="status-B" class="status">OFFLINE</span>
+                </div>
+            </div>
+            <canvas id="canvas-B"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // --- COMMON DRAWING ---
+        function drawRadar(ctx, width, height, mapData, maxDist, angle) {
+            // Clear
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(0, 0, width, height);
+
+            const cx = width / 2;
+            const cy = height / 2;
+            const r = Math.min(cx, cy) - 20;
+
+            // Grid
+            ctx.strokeStyle = '#003333'; ctx.lineWidth = 1; ctx.beginPath();
+            for (let i = 1; i <= 4; i++) ctx.arc(cx, cy, r * (i / 4), 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Map
+            ctx.fillStyle = '#00FFFF';
+            for (let i = 0; i < 360; i++) {
+                if (mapData[i] <= 0) continue;
+
+                // Adjust angle for standard view (0 is right, usually radar 0 is up)
+                // Let's assume 0 is UP (-90 deg)
+                const rad = (i - 90) * (Math.PI / 180);
+                const distPx = (mapData[i] / maxDist) * r;
+
+                const x = cx + Math.cos(rad) * distPx;
+                const y = cy + Math.sin(rad) * distPx;
+
+                ctx.fillRect(x - 1, y - 1, 3, 3);
+            }
+
+            // Scanner
+            const scanRad = (angle - 90) * (Math.PI / 180);
+            ctx.strokeStyle = 'rgba(0,255,0,0.5)';
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + Math.cos(scanRad) * r, cy + Math.sin(scanRad) * r);
+            ctx.stroke();
+        }
+
+        // --- SYSTEM A (Ultrasonic) ---
+        const cvsA = document.getElementById('canvas-A');
+        const ctxA = cvsA.getContext('2d');
+        const mapA = new Array(360).fill(0);
+        let wsA;
+        let angleA = 0;
+
+        function resizeA() {
+            cvsA.width = cvsA.clientWidth;
+            cvsA.height = cvsA.clientHeight;
+        }
+
+        function connectA() {
+            const ip = document.getElementById('ip-A').value;
+            if (wsA) wsA.close();
+            wsA = new WebSocket('ws://' + ip + ':81/');
+
+            wsA.onopen = () => {
+                document.getElementById('status-A').innerText = "ONLINE";
+                document.getElementById('status-A').classList.add('connected');
+            };
+            wsA.onclose = () => {
+                document.getElementById('status-A').innerText = "OFFLINE";
+                document.getElementById('status-A').classList.remove('connected');
+            };
+            wsA.onmessage = (e) => {
+                try {
+                    const d = JSON.parse(e.data);
+                    angleA = d.angle;
+                    updateMap(mapA, d.angle, d.d_front, 400);
+                    updateMap(mapA, d.angle + 90, d.d_left, 400);
+                    updateMap(mapA, d.angle + 180, d.d_back, 400);
+                    updateMap(mapA, d.angle + 270, d.d_right, 400);
+                } catch (err) { }
+            };
+        }
+
+        // --- SYSTEM B (TOF) ---
+        const cvsB = document.getElementById('canvas-B');
+        const ctxB = cvsB.getContext('2d');
+        const mapB = new Array(360).fill(0);
+        let wsB;
+        let angleB = 0;
+
+        function resizeB() {
+            cvsB.width = cvsB.clientWidth;
+            cvsB.height = cvsB.clientHeight;
+        }
+
+        function connectB() {
+            const ip = document.getElementById('ip-B').value;
+            if (wsB) wsB.close();
+            wsB = new WebSocket('ws://' + ip + ':81/');
+
+            wsB.onopen = () => {
+                document.getElementById('status-B').innerText = "ONLINE";
+                document.getElementById('status-B').classList.add('connected');
+            };
+            wsB.onclose = () => {
+                document.getElementById('status-B').innerText = "OFFLINE";
+                document.getElementById('status-B').classList.remove('connected');
+            };
+            wsB.onmessage = (e) => {
+                try {
+                    const d = JSON.parse(e.data);
+                    angleB = d.angle;
+                    // TOF Logic
+                    let dist = d.distance;
+                    if (dist > 8000 || dist <= 0) dist = 0; // Clear if invalid
+
+                    // Map Update
+                    const a = d.angle % 360;
+                    mapB[a] = dist;
+
+                } catch (err) { }
+            };
+        }
+
+        // Helper
+        function updateMap(map, deg, dist, max) {
+            let a = deg % 360;
+            if (a < 0) a += 360;
+            if (dist <= 0 || dist > max) map[a] = 0;
+            else map[a] = dist;
+        }
+
+        // Loop
+        function loop() {
+            drawRadar(ctxA, cvsA.width, cvsA.height, mapA, 400, angleA);
+            drawRadar(ctxB, cvsB.width, cvsB.height, mapB, 2000, angleB); // 2000mm max for TOF view
+            requestAnimationFrame(loop);
+        }
+
+        window.onresize = () => { resizeA(); resizeB(); };
+        resizeA(); resizeB();
+        loop();
+
+        // Auto-Connect on Load
+        setTimeout(() => {
+            connectA();
+            connectB();
+        }, 1000);
+
+    </script>
+</body>
+
+</html>
